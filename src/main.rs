@@ -5,7 +5,14 @@ use std::fs::File;
 use std::io;
 use std::io::BufWriter;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+
+struct ScanParams {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    steps: usize,
+}
 
 fn main() {
     welcome_message();
@@ -26,12 +33,23 @@ fn main() {
                 println!("Quitting...");
             }
             "" => {
-                create_xml();
-                running = false;
-                println!("Quitting...");
+                // 1. Get the parameters from the user
+                if let Some(params) = get_user_coords() {
+                    // 2. Generate the mathematical points
+                    let points = generate_points(&params);
+                    // 3. Create the XML using those points
+                    create_xml(points);
+                    running = false;
+                    println!("Quitting...");
+                } else {
+                    println!("Invalid input. Please use the format: x1, y1, x2, y2, steps");
+                    println!("Press enter to try again. HINT: Press up arrow to get last input.");
+                    // Loop will continue so user can try again
+                }
             }
             _ => {
                 println!("Unknown input: {}", user_input);
+                println!("Press enter to continue... or type q to quit.");
             }
         }
     }
@@ -52,7 +70,11 @@ Ben 2026
     );
     println!("This tool generates XML files which give a list of coordinates for ND2 Acquisition.");
     println!("Each time you run the program, an XML file will be created in the 'output' folder.");
-    println!("Be prepared to paste the starting and final positions for your ideal movement path.");
+    println!(
+        "It may be useful to have a notepad open with your desired coordinates for copy pasting. 
+        
+Example: x1, y1, x2, y2, steps"
+    );
 
     println!(
         "
@@ -60,8 +82,51 @@ Continue (press Enter) or quit (type 'q' and press Enter):"
     );
 }
 
-fn calculate_stepsize(distance: f64, steps: u32) -> f64 {
-    distance / steps as f64
+fn get_user_coords() -> Option<ScanParams> {
+    println!("Enter coordinates: x1, y1, x2, y2, steps:");
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).ok()?;
+
+    // Split by comma, collect into a Vec of trimmed strings
+    let parts: Vec<&str> = input.split(',').map(|s| s.trim()).collect();
+
+    if parts.len() != 5 {
+        println!("Error: Expected 5 values, got {}.", parts.len());
+        return None;
+    }
+
+    // Parse each part, handling potential errors gracefully
+    let x1 = parts[0].parse::<f64>().ok()?;
+    let y1 = parts[1].parse::<f64>().ok()?;
+    let x2 = parts[2].parse::<f64>().ok()?;
+    let y2 = parts[3].parse::<f64>().ok()?;
+    let steps = parts[4].parse::<usize>().ok()?;
+
+    Some(ScanParams {
+        x1,
+        y1,
+        x2,
+        y2,
+        steps,
+    })
+}
+
+fn generate_points(params: &ScanParams) -> Vec<(f64, f64)> {
+    let mut points = Vec::new();
+
+    if params.steps <= 1 {
+        points.push((params.x1, params.y1));
+        return points;
+    }
+
+    let dx = (params.x2 - params.x1) / (params.steps - 1) as f64;
+    let dy = (params.y2 - params.y1) / (params.steps - 1) as f64;
+
+    for i in 0..params.steps {
+        points.push((params.x1 + (dx * i as f64), params.y1 + (dy * i as f64)));
+    }
+    points
 }
 
 fn time_code_filename(dir: &str) -> String {
@@ -75,7 +140,7 @@ fn time_code_filename(dir: &str) -> String {
     filename
 }
 
-fn create_xml() {
+fn create_xml(points: Vec<(f64, f64)>) {
     println!("Generating XML file...");
     let dir = "output";
 
@@ -88,7 +153,6 @@ fn create_xml() {
     }
 
     // 2. Combine the directory and filename
-    // Path::new(dir).join(filename) handles slashes correctly for Windows or Mac/Linux
     let path = Path::new(dir).join(filename);
 
     // Convert path to a string to pass to your function
@@ -96,19 +160,21 @@ fn create_xml() {
 
     println!("Generating XML at {}...", path_str);
 
-    match create_script(path_str) {
+    match create_script(path_str, points) {
         Ok(_) => println!("Successfully created XML in the output folder!"),
         Err(e) => eprintln!("Error creating XML: {}", e),
     }
 }
 
-fn create_script(output_filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn create_script(
+    output_filename: &str,
+    coordinates: Vec<(f64, f64)>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // 1. Setup the writer (using a BufWriter for performance)
     let file = File::create(output_filename)?;
     let mut writer = Writer::new_with_indent(BufWriter::new(file), b' ', 2);
 
-    // 2. Write XML Declaration (UTF-16 is specified in your Python, but
-    // note that Rust strings are UTF-8. quick-xml handles the header tag here.)
+    // 2. Write XML Declaration
     writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-16"), None)))?;
 
     // 3. Create Root: <variant version="1.0">
@@ -124,10 +190,9 @@ fn create_script(output_filename: &str) -> Result<(), Box<dyn std::error::Error>
     write_sub_element(&mut writer, "bIncludeZ", "bool", "false")?;
     write_sub_element(&mut writer, "bPFSEnabled", "bool", "false")?;
 
-    // 5. Logic Loop (Simplified coordinate mock)
-    let coordinates = vec![(106464.830134385, 25188.343777459, 57159.144); 3]; // Mocking your generator
+    // 5. Logic Loop
 
-    for (index, (x, y, z)) in coordinates.iter().enumerate() {
+    for (index, (x, y)) in coordinates.iter().enumerate() {
         let tag = format!("Point{:05}", index);
         let name = format!("A{}", index + 1);
 
@@ -139,7 +204,7 @@ fn create_script(output_filename: &str) -> Result<(), Box<dyn std::error::Error>
         write_sub_element(&mut writer, "strName", "CLxStringW", &name)?;
         write_sub_element(&mut writer, "dXPosition", "double", &format!("{:.15}", x))?;
         write_sub_element(&mut writer, "dYPosition", "double", &format!("{:.15}", y))?;
-        write_sub_element(&mut writer, "dZPosition", "double", &format!("{:.15}", z))?;
+        write_sub_element(&mut writer, "dZPosition", "double", &format!("{:.15}", 0.0))?;
         write_sub_element(&mut writer, "dPFSOffset", "double", "-1.000000000000000")?;
         write_sub_element(&mut writer, "baUserData", "CLxByteArray", "")?;
 
@@ -165,24 +230,6 @@ fn write_sub_element<W: std::io::Write>(
     writer.write_event(Event::Empty(elem))?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_calculate_stepsize() {
-        let distance = 10.0;
-        let steps = 5;
-        let expected_stepsize = 2.0;
-        let result = calculate_stepsize(distance, steps);
-        assert_eq!(result, expected_stepsize);
-    }
-}
-
-// TODO:
-// - Add user input for coordinates and steps
-// - (x,y,z)
-// - Alternative coordinate generation based off speed?
 
 // STRATEGY:
 // - User provides start and end coordinates + steps
