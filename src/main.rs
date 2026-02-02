@@ -39,41 +39,47 @@ fn main() {
 
 fn welcome_message() {
     println!(
-        r"
-     _                                                                     _   
+        r"     _                                                                     _   
  ___| |_ __ _  __ _  ___     _ __ ___   _____   _____ _ __ ___   ___ _ __ | |_ 
 / __| __/ _` |/ _` |/ _ \   | '_ ` _ \ / _ \ \ / / _ \ '_ ` _ \ / _ \ '_ \| __|
 \__ \ || (_| | (_| |  __/   | | | | | | (_) \ V /  __/ | | | | |  __/ | | | |_ 
 |___/\__\__,_|\__, |\___/   |_| |_| |_|\___/ \_/ \___|_| |_| |_|\___|_| |_|\__|
               |___/                                                        
 XML Generator
-Ben 2026
--------------------------------------------------------------------------------------------
+Ben 2026      
+[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]->[]
 "
     );
-    println!("Instructions:");
-    println!("Follow the prompts and press enter to continue.");
-    println!("Enter 'q' to quit.");
+    println!("This tool generates XML files which give a list of coordinates for ND2 Acquisition.");
+    println!("Each time you run the program, an XML file will be created in the 'output' folder.");
+    println!("Be prepared to paste the starting and final positions for your ideal movement path.");
+
+    println!(
+        "
+Continue (press Enter) or quit (type 'q' and press Enter):"
+    );
 }
 
 fn calculate_stepsize(distance: f64, steps: u32) -> f64 {
     distance / steps as f64
 }
 
-fn time_code_filename() -> String {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
+fn time_code_filename(dir: &str) -> String {
+    let mut counter = 0;
+    let mut filename = String::from("script.xml");
 
-    return format!("script_{}.xml", since_the_epoch.as_secs());
+    while Path::new(dir).join(&filename).exists() {
+        counter += 1;
+        filename = format!("script_{}.xml", counter);
+    }
+    filename
 }
 
 fn create_xml() {
     println!("Generating XML file...");
     let dir = "output";
 
-    let filename = time_code_filename();
+    let filename = time_code_filename(&dir);
 
     // 1. Create the "output" folder if it doesn't exist
     if let Err(e) = fs::create_dir_all(dir) {
@@ -172,3 +178,18 @@ mod tests {
         assert_eq!(result, expected_stepsize);
     }
 }
+
+// TODO:
+// - Add user input for coordinates and steps
+// - (x,y,z)
+// - Alternative coordinate generation based off speed?
+
+// STRATEGY:
+// - User provides start and end coordinates + steps
+// - Calculate stepsize for each axis
+// - Generate list of coordinates
+// - Write XML file with those coordinates
+
+// COOL FEATURE IDEA:
+// - Remembner last used coordinates and steps in a config file
+// - Reverse direction option (start -> end or end -> start)
