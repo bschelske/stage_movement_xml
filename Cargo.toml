@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 quick-xml = "0.39.0"
+
+[build-dependencies]
+winres = "0.1"
