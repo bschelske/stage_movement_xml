@@ -1,9 +1,9 @@
 use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
+use quick_xml::events::{BytesEnd, BytesStart, Event};
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::BufWriter;
+use std::io::Write;
 use std::path::Path;
 
 struct ScanParams {
@@ -53,6 +53,13 @@ fn main() {
             }
         }
     }
+
+    println!("Press Enter to close this window...");
+
+    let mut exit_wait = String::new();
+    io::stdin()
+        .read_line(&mut exit_wait)
+        .expect("Failed to read line");
 }
 
 fn welcome_message() {
@@ -75,6 +82,8 @@ Ben 2026
         
 Example: x1, y1, x2, y2, steps"
     );
+
+    println!("The coordinates MUST be in millimeters (mm).");
 
     println!(
         "
@@ -124,7 +133,10 @@ fn generate_points(params: &ScanParams) -> Vec<(f64, f64)> {
     let dy = (params.y2 - params.y1) / (params.steps - 1) as f64;
 
     for i in 0..params.steps {
-        points.push((params.x1 + (dx * i as f64), params.y1 + (dy * i as f64)));
+        // Multiply by 1000.0 to convert mm to microns (if that's the discrepancy)
+        let x = (params.x1 + (dx * i as f64)) * 1000.0;
+        let y = (params.y1 + (dy * i as f64)) * 1000.0;
+        points.push((x, y));
     }
     points
 }
@@ -170,27 +182,21 @@ fn create_script(
     output_filename: &str,
     coordinates: Vec<(f64, f64)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Setup the writer (using a BufWriter for performance)
-    let file = File::create(output_filename)?;
-    let mut writer = Writer::new_with_indent(BufWriter::new(file), b' ', 2);
+    // 1. Create the XML string in memory first (Rust strings are UTF-8)
+    let mut buffer = Vec::new();
+    let mut writer = Writer::new(&mut buffer);
 
-    // 2. Write XML Declaration
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-16"), None)))?;
-
-    // 3. Create Root: <variant version="1.0">
+    // No Declaration here, we'll add it manually to match your Python logic
     let mut variant = BytesStart::new("variant");
     variant.push_attribute(("version", "1.0"));
     writer.write_event(Event::Start(variant))?;
 
-    // 4. Create <no_name runtype="CLxListVariant">
     let mut no_name = BytesStart::new("no_name");
     no_name.push_attribute(("runtype", "CLxListVariant"));
     writer.write_event(Event::Start(no_name))?;
 
     write_sub_element(&mut writer, "bIncludeZ", "bool", "false")?;
     write_sub_element(&mut writer, "bPFSEnabled", "bool", "false")?;
-
-    // 5. Logic Loop
 
     for (index, (x, y)) in coordinates.iter().enumerate() {
         let tag = format!("Point{:05}", index);
@@ -211,9 +217,27 @@ fn create_script(
         writer.write_event(Event::End(BytesEnd::new(&tag)))?;
     }
 
-    // 6. Close Tags
     writer.write_event(Event::End(BytesEnd::new("no_name")))?;
     writer.write_event(Event::End(BytesEnd::new("variant")))?;
+
+    // 2. Prepare the final string with the Header
+    let xml_content = String::from_utf8(buffer)?;
+    let final_xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n{}",
+        xml_content
+    );
+
+    // 3. Convert to UTF-16 Little Endian
+    let utf16_encoded: Vec<u16> = final_xml.encode_utf16().collect();
+
+    // 4. Write to file with the BOM (0xFF 0xFE)
+    let mut file = File::create(output_filename)?;
+    file.write_all(&[0xFF, 0xFE])?; // THE CRITICAL PART: BOM
+
+    // Convert u16 vector to u8 bytes (Little Endian)
+    for &u in &utf16_encoded {
+        file.write_all(&u.to_le_bytes())?;
+    }
 
     Ok(())
 }
