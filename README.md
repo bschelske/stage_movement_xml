@@ -43,4 +43,32 @@ For easy copy-pasting, open a `notepad.txt` and record your positions in the fol
 1. In the Nikon ND Acquisition menu, click **"Load..."**
 2. Select the `.xml` file you just generated.
 3. The XY point list will now be populated with your calculated path.
+## 📥 Installation
 
+### Option 1: Quick Start (Recommended)
+If you just want to use the tool without touching any code:
+1. Go to the **[Releases](https://github.com/bschelske/stage_movement_xml.git/releases)** page on this repository.
+2. Download the `stage_movement.exe` file from the latest version.
+3. Move the `.exe` to your desired folder (e.g., `Desktop/FL Stage Movement/`) and run it.
+
+---
+
+### Option 2: Build from Source
+If you want to modify the code or compile it yourself, you will need the Rust toolchain.
+
+#### 1. Install Rust
+Go to [rustup.rs](https://rustup.rs/) and follow the instructions for Windows to install `rustc` and `cargo`.
+
+#### 2. Clone the Repository
+Open your terminal (PowerShell or Command Prompt) and run:
+```bash
+git clone https://github.com/bschelske/stage_movement_xml.git
+cd stage_movement_xml
+```
+#### 3. Build
+```bash
+cargo build --release
+```
+
+#### 4. Locate Executable
+The file will be in ```./target/release/stage_movement.exe. ```
