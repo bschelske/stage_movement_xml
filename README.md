@@ -1,4 +1,4 @@
-# ND2 Coordinate XML Generator 🔬
+# SlideStride 🔬
 **A tool for automated linear multipoint path generation in Nikon NIS-Elements.**
 
 ---
